@@ -4,8 +4,96 @@
 # This model is looking at Mutiple flowers as a product of light availablility.
 library(lme4)
 library(ggplot2)
+# Need to install the DHARMa package before I can access it via my library.
+# This is a simple process
+# However, I keep getting errors. 
+install.packages("DHARMa") # No good
+install.packages('DHARMa', dependencies=TRUE, type="source") # Good!
 library(DHARMa)
 hjamultidfenegnoorimNB=glmer.nb(flravg ~ totallight + offset(log(cover)) +
 (1|species) + (1|transect) + 
 (1|transquad) , data = hjaflowermultiplenoorim, control= glmerControl(tolPwrss=1e-5, optimizer="bobyqa"))
+
+# A function to check for overdispersion in my model
+# Overdispersion check function ----
+overdisp_fun <- function(model) {
+  ## number of variance parameters in 
+  ##   an n-by-n variance-covariance matrix
+  vpars <- function(m) {
+    nrow(m)*(nrow(m)+1)/2
+  }
+  model.df <- sum(sapply(VarCorr(model),vpars))+length(fixef(model))
+  rdf <- nrow(model.frame(model))-model.df
+  rp <- residuals(model,type="pearson")
+  Pearson.chisq <- sum(rp^2)
+  prat <- Pearson.chisq/rdf
+  pval <- pchisq(Pearson.chisq, df=rdf, lower.tail=FALSE)
+  c(chisq=Pearson.chisq,ratio=prat,rdf=rdf,p=pval)
+}
+# With quadratic relationship for light added
+hjamultidfenegnoorimNB = glmer.nb(flravg ~ totallight + offset(log(cover)) + 
+                                    (1|species) + (1|transect) + (1|transquad), 
+                                  data = hjaflowermultiplenoorim, 
+                                  control = glmerControl(optimizer="bobyqa"))
+summary(hjamultidfenegnoorimNB)
+
+# Warnings
+hjamultidfenegnoorimNB@optinfo$conv$lme4$messages
+
+# Residual plots
+qplot(fitted(hjamultidfenegnoorimNB), resid(hjamultidfenegnoorimNB, type = "deviance"))
+qplot(totallight, resid(hjamultidfenegnoorimNB, type = "deviance"), data = hjaflowermultiplenoorim)
+
+# Check overdispersion
+overdisp_fun(hjamultidfenegnoorimNB)
+#Dispersion doesn't look too bad. Especially when compared to the poisson models.
+
+# DHARMa residual plots
+simNB<-simulateResiduals(fittedModel=hjamultidfenegnoorimNB, n=250)
+plotSimulatedResiduals(simulationOutput = simNB)
+# The large predicted values make it hard to see what's going on
+
+# Plot values directly to see how things look closer to 0
+qplot(simNB$fittedPredictedResponse, simNB$scaledResiduals)
+qplot(simNB$fittedPredictedResponse, simNB$scaledResiduals) +
+  xlim(0, 100)
+
+
+# Simulated resids vs explanatory
+# Possible quadratic relationship?  Try poly(totallight, 2)
+plotResiduals(hjaflowermultiplenoorim$totallight,  simNB$scaledResiduals)
+
+
+# Obs-level random effect poisson model
+fitp = glmer(flravg ~ totallight + offset(log(cover)) +
+               (1|species) + (1|transect) + (1|transquad) +
+               (1|transquad:species) , family = "poisson",
+             data = hjaflowermultiplenoorim, 
+             control= glmerControl(optimizer="bobyqa"))
+
+# underdispersion
+overdisp_fun(fitp)
+
+
+# DHARMa residual plots
+simP = simulateResiduals(fittedModel = fitp, n = 250)
+plotSimulatedResiduals(simulationOutput = simP)
+
+# By-hand plot of simulated resids vs explanatory
+qplot(simP$fittedPredictedResponse, simP$scaledResiduals)
+
+# Simulated resids vs explanatory
+plotResiduals(hjaflowermultiplenoorim$totallight,  simP$scaledResiduals)
+
+
+summary(hjamultidfenegnoorimNB)
+exp(0.028761*10)
+(1.333237-1)*100
+confint(hjamultidfenegnoorimNB, method = "Wald")
+# I got the code below from Zuur et al. 2009
+plot(hjamultidfenegnoorimNB, which = c(1), col = 1, add.smooth = FALSE,caption = "")
+#violating homogeneity in the residual vs. fitted values. Not a good thing. It was hard to understand from Zuur whether this pattern is okay with a negative binomial or not.
+plot(hjaflowermultiplenoorim$totallight, resid(hjamultidfenegnoorimNB), xlab = "Total Light",ylab = "Residuals")
+# This plot doesn't look too bad though in term of homogeneity. There's definitely more data in high light conditions, but they're spread pretty evenly
+# I conclude that the above model looks okay in terms of meeting assumptions and not violating homogeneity to much.
 
