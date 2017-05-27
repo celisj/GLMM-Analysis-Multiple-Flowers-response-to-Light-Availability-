@@ -1,0 +1,11 @@
+# 05/27/2017 Again I am going to attempt to get myself back into this mess of a prolonged project
+# Separating all models in scripts and working with them individually until they work.
+# Ariel says that the multiple flower glmmNB model looks the best. I will start there.
+# This model is looking at Mutiple flowers as a product of light availablility.
+library(lme4)
+library(ggplot2)
+library(DHARMa)
+hjamultidfenegnoorimNB=glmer.nb(flravg ~ totallight + offset(log(cover)) +
+(1|species) + (1|transect) + 
+(1|transquad) , data = hjaflowermultiplenoorim, control= glmerControl(tolPwrss=1e-5, optimizer="bobyqa"))
+
